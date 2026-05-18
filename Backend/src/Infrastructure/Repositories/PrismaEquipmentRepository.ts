@@ -69,8 +69,11 @@ export class PrismaEquipmentRepository implements IEquipmentRepository {
         where: { id }
       });
       return true;
-    } catch {
-      return false;
+    } catch (error: any) {
+      if (error.code === "P2003") {
+        throw new Error("Não é possível excluir o equipamento pois ele está vinculado a solicitações ou empréstimos ativos.");
+      }
+      throw error;
     }
   }
 }

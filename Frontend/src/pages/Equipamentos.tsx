@@ -264,7 +264,10 @@ export default function Equipamentos() {
           ...(token ? { "Authorization": `Bearer ${token}` } : {})
         }
       });
-      if (!res.ok) throw new Error("Erro ao remover o equipamento");
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        throw new Error(errorJson.error || "Erro ao remover o equipamento");
+      }
       setData((d) => d.filter((e) => e.id !== id));
       toast.success("Equipamento removido com sucesso.");
     } catch (err: any) {
