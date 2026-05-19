@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Equipment } from "@/data/mock";
-import { Search, Plus, Pencil, Trash2, Monitor, ArrowRightLeft, Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, Monitor, ArrowRightLeft, Loader2, Calendar as CalendarIcon, CheckCircle2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -281,14 +281,14 @@ export default function Equipamentos() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="font-heading text-2xl font-bold tracking-tight">Equipamentos</h1>
-            <div className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full text-xs font-semibold">
-              Total: {filtered.length}
+            <div className="bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full text-xs font-semibold">
+              Total: {data.length}
             </div>
           </div>
           <p className="text-muted-foreground text-sm mt-1">Gerencie os equipamentos da organização</p>
         </div>
         {user?.role === "Administrador" ? (
-          <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
+          <Button onClick={() => { setEditing(null); setDialogOpen(true); }} className="bg-primary hover:bg-primary/95 text-primary-foreground font-semibold shadow-sm transition-all duration-200">
             <Plus className="h-4 w-4 mr-2" /> Novo Equipamento
           </Button>
         ) : (
@@ -297,6 +297,87 @@ export default function Equipamentos() {
           </div>
         )}
       </div>
+
+      {user?.role === "Administrador" && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="bg-card shadow-sm border border-border/60 rounded-xl transition-all duration-200 hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total de Equipamentos</CardTitle>
+              <Monitor className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-extrabold tracking-tight text-foreground">{data.length}</div>
+              <p className="text-[10px] text-muted-foreground mt-1">Registrados na base de dados</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card shadow-sm border border-border/60 rounded-xl transition-all duration-200 hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Disponíveis</CardTitle>
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-extrabold tracking-tight text-foreground">
+                {data.filter((e) => e.status === "disponivel").length}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">Prontos para empréstimo</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card shadow-sm border border-border/60 rounded-xl transition-all duration-200 hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Emprestados</CardTitle>
+              <ArrowRightLeft className="h-4 w-4 text-purple-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-extrabold tracking-tight text-foreground">
+                {data.filter((e) => e.status === "em_uso").length}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">Ativos com colaboradores</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {user?.role === "Administrador" && (
+        <div className="flex items-center gap-2 border-b pb-2">
+          <button
+            onClick={() => setFilter("todos")}
+            className={cn(
+              "px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 select-none",
+              filter === "todos"
+                ? "bg-primary text-primary-foreground shadow-sm scale-102"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            Todos
+          </button>
+          <button
+            onClick={() => setFilter("disponivel")}
+            className={cn(
+              "px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 select-none flex items-center gap-1.5",
+              filter === "disponivel"
+                ? "bg-green-600 text-white shadow-sm scale-102"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
+            Disponível
+          </button>
+          <button
+            onClick={() => setFilter("em_uso")}
+            className={cn(
+              "px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 select-none flex items-center gap-1.5",
+              filter === "em_uso"
+                ? "bg-purple-600 text-white shadow-sm scale-102"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse"></span>
+            Emprestado
+          </button>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -310,19 +391,6 @@ export default function Equipamentos() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            {user?.role === "Administrador" && (
-              <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os status</SelectItem>
-                  <SelectItem value="disponivel">Disponível</SelectItem>
-                  <SelectItem value="em_uso">Em uso</SelectItem>
-                  <SelectItem value="manutencao">Manutenção</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
           </div>
         </CardHeader>
         <CardContent>
