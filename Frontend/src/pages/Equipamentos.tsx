@@ -21,6 +21,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, differenceInDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5279/api";
 
@@ -89,12 +90,11 @@ const compressImage = (file: File): Promise<Blob> => {
 };
 
 export default function Equipamentos() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("todos");
-  const [data, setData] = useState<Equipment[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Equipment | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [zoomedImage, setZoomedImage] = useState<{ src: string; alt: string } | null>(null);
 
   const { user } = useAuth();
@@ -103,6 +103,51 @@ export default function Equipamentos() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [loanNotes, setLoanNotes] = useState("");
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  const { data: equipments = [], isLoading } = useQuery<Equipment[]>({
+    queryKey: ["equipments"],
+    queryFn: async () => {
+      const token = localStorage.getItem("resource_buddy_token");
+      const res = await fetch(`${apiUrl}/equipments`, {
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
+      });
+      if (!res.ok) throw new Error("Erro ao buscar equipamentos da API");
+      return res.json();
+    }
+  });
+
+  const requestLoanMutation = useMutation({
+    mutationFn: async (payload: { equipmentId: string | number; days: number; startDate: string; endDate: string; notes: string; sector: string | undefined }) => {
+      const token = localStorage.getItem("resource_buddy_token");
+      const res = await fetch(`${apiUrl}/loans`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        throw new Error(errorJson.error || "Erro ao solicitar equipamento.");
+      }
+    },
+    onSuccess: () => {
+      toast.success("Solicitação de empréstimo enviada com sucesso!");
+      setRequestingEquipment(null);
+      setLoanNotes("");
+      setStartDate(undefined);
+      setEndDate(undefined);
+      queryClient.invalidateQueries({ queryKey: ["equipments"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-loans"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Não foi possível enviar a solicitação.");
+    },
+    onSettled: () => {
+      setIsSubmittingRequest(false);
+    }
+  });
 
   const handleRequestLoanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,84 +166,78 @@ export default function Equipamentos() {
     const startSelected = startOfDay(startDate);
     const endSelected = startOfDay(endDate);
 
-    if (startSelected < today) {
-      toast.error("A Data de Início não pode ser anterior à data de hoje.");
-      return;
-    }
+    if (startSelected < today) return toast.error("A Data de Início não pode ser anterior à data de hoje.");
+    if (endSelected < startSelected) return toast.error("A Data de Fim não pode ser anterior à Data de Início.");
 
-    if (endSelected < startSelected) {
-      toast.error("A Data de Fim não pode ser anterior à Data de Início.");
-      return;
-    }
-
-    // Calcular dias de empréstimo (diferença em dias inteiros)
     let days = differenceInDays(endSelected, startSelected);
-    if (days <= 0) {
-      days = 1; // Mínimo de 1 dia de empréstimo caso início e fim sejam iguais
-    }
+    if (days <= 0) days = 1;
 
-    try {
-      setIsSubmittingRequest(true);
+    setIsSubmittingRequest(true);
+    requestLoanMutation.mutate({
+      equipmentId: requestingEquipment.id,
+      days,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      notes: loanNotes,
+      sector: user?.sector
+    });
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload: { eq: Equipment; newImageBlob: Blob | null }) => {
+      const { eq, newImageBlob } = payload;
       const token = localStorage.getItem("resource_buddy_token");
-      const res = await fetch(`${apiUrl}/loans`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          equipmentId: requestingEquipment.id,
-          days,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-          notes: loanNotes,
-          sector: user?.sector
-        })
-      });
+      const formData = new FormData();
+      formData.append("name", eq.name);
+      formData.append("status", eq.status);
+      formData.append("serialNumber", eq.serialNumber);
+      formData.append("description", eq.description);
 
+      if (eq.id) formData.append("id", String(eq.id));
+      if (newImageBlob) formData.append("image", newImageBlob, "image.jpg");
+      else if (eq.image) formData.append("image", eq.image);
+
+      const url = eq.id ? `${apiUrl}/equipments/${eq.id}` : `${apiUrl}/equipments`;
+      const res = await fetch(url, {
+        method: eq.id ? "PUT" : "POST",
+        body: formData,
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
+      });
+      if (!res.ok) throw new Error("Erro ao salvar o equipamento na API");
+      return { saved: await res.json(), isEdit: !!eq.id };
+    },
+    onSuccess: ({ isEdit }) => {
+      toast.success(isEdit ? "Equipamento atualizado com sucesso!" : "Equipamento cadastrado com sucesso!");
+      setDialogOpen(false);
+      setEditing(null);
+      queryClient.invalidateQueries({ queryKey: ["equipments"] });
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string | number) => {
+      const token = localStorage.getItem("resource_buddy_token");
+      const res = await fetch(`${apiUrl}/equipments/${id}`, {
+        method: "DELETE",
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
+      });
       if (!res.ok) {
         const errorJson = await res.json().catch(() => ({}));
-        throw new Error(errorJson.error || "Erro ao solicitar equipamento.");
+        throw new Error(errorJson.error || "Erro ao remover o equipamento");
       }
+    },
+    onSuccess: () => {
+      toast.success("Equipamento removido com sucesso.");
+      queryClient.invalidateQueries({ queryKey: ["equipments"] });
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
 
-      toast.success("Solicitação de empréstimo enviada com sucesso!");
-      setRequestingEquipment(null);
-      setLoanNotes("");
-      setStartDate(undefined);
-      setEndDate(undefined);
-      fetchEquipments();
-    } catch (err: any) {
-      toast.error(err.message || "Não foi possível enviar a solicitação.");
-    } finally {
-      setIsSubmittingRequest(false);
-    }
-  };
+  const handleSave = (eq: Equipment, newImageBlob: Blob | null) => saveMutation.mutate({ eq, newImageBlob });
+  const handleDelete = (id: string | number) => deleteMutation.mutate(id);
 
-  const fetchEquipments = async () => {
-    try {
-      setIsLoading(true);
-      const token = localStorage.getItem("resource_buddy_token");
-      const res = await fetch(`${apiUrl}/equipments`, {
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
-      });
-      if (!res.ok) throw new Error("Erro ao buscar equipamentos da API");
-      const json = await res.json();
-      setData(json);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Não foi possível conectar ao servidor backend.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchEquipments();
-  }, []);
-
-  const filtered = data.filter((e) => {
+  const filtered = equipments.filter((e) => {
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) ||
       e.serialNumber.toLowerCase().includes(search.toLowerCase());
 
@@ -208,73 +247,6 @@ export default function Equipamentos() {
     return matchSearch && matchFilter && matchRole;
   });
 
-  const handleSave = async (eq: Equipment, newImageBlob: Blob | null) => {
-    try {
-      const token = localStorage.getItem("resource_buddy_token");
-      const formData = new FormData();
-      formData.append("name", eq.name);
-      formData.append("status", eq.status);
-      formData.append("serialNumber", eq.serialNumber);
-      formData.append("description", eq.description);
-
-      if (eq.id) {
-        formData.append("id", String(eq.id));
-      }
-
-      if (newImageBlob) {
-        formData.append("image", newImageBlob, "image.jpg");
-      } else if (eq.image) {
-        formData.append("image", eq.image);
-      }
-
-      const method = eq.id ? "PUT" : "POST";
-      const url = eq.id ? `${apiUrl}/equipments/${eq.id}` : `${apiUrl}/equipments`;
-
-      const res = await fetch(url, {
-        method,
-        body: formData,
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
-      });
-
-      if (!res.ok) throw new Error("Erro ao salvar o equipamento na API");
-      const saved = await res.json();
-
-      if (eq.id) {
-        setData((d) => d.map((e) => (e.id === saved.id ? saved : e)));
-        toast.success("Equipamento atualizado com sucesso!");
-      } else {
-        setData((d) => [saved, ...d]);
-        toast.success("Equipamento cadastrado com sucesso!");
-      }
-      setDialogOpen(false);
-      setEditing(null);
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleDelete = async (id: string | number) => {
-    try {
-      const token = localStorage.getItem("resource_buddy_token");
-      const res = await fetch(`${apiUrl}/equipments/${id}`, {
-        method: "DELETE",
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
-      });
-      if (!res.ok) {
-        const errorJson = await res.json().catch(() => ({}));
-        throw new Error(errorJson.error || "Erro ao remover o equipamento");
-      }
-      setData((d) => d.filter((e) => e.id !== id));
-      toast.success("Equipamento removido com sucesso.");
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -282,7 +254,7 @@ export default function Equipamentos() {
           <div className="flex items-center gap-3">
             <h1 className="font-heading text-2xl font-bold tracking-tight">Equipamentos</h1>
             <div className="bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full text-xs font-semibold">
-              Total: {data.length}
+              Total: {equipments.length}
             </div>
           </div>
           <p className="text-muted-foreground text-sm mt-1">Gerencie os equipamentos da organização</p>
