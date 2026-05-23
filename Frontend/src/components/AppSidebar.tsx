@@ -210,16 +210,16 @@ export function AppSidebar() {
                       </div>
                       {!collapsed && (
                         <div className="flex flex-col text-left min-w-0">
-                          <span className="truncate text-xs font-semibold text-foreground">
+                          <span className="truncate text-xs font-semibold text-sidebar-foreground">
                             {getFirstName(user.name)}
                           </span>
-                          <span className="truncate text-[10px] text-muted-foreground">
+                          <span className="truncate text-[10px] text-sidebar-foreground/70">
                             {user.sector}
                           </span>
                         </div>
                       )}
                     </div>
-                    {!collapsed && <ChevronsUpDown className="h-4 w-4 text-muted-foreground shrink-0 ml-1" />}
+                    {!collapsed && <ChevronsUpDown className="h-4 w-4 text-sidebar-foreground/70 shrink-0 ml-1" />}
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
