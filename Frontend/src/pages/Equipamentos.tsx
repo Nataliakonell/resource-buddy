@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Equipment } from "@/data/mock";
-import { Search, Plus, Pencil, Trash2, Monitor, ArrowRightLeft, Loader2, Calendar as CalendarIcon, CheckCircle2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, Monitor, ArrowRightLeft, Loader2, Calendar as CalendarIcon, CheckCircle2, ImageUp } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -582,6 +582,8 @@ function EquipmentDialog({
   const [form, setForm] = useState<Partial<Equipment>>({});
   const [imageFile, setImageFile] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -602,13 +604,11 @@ function EquipmentDialog({
     }
   }, [open, equipment]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const processImageFile = async (file: File) => {
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("O arquivo excede o limite máximo de 10 MB.");
-      e.target.value = "";
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("O arquivo excede o limite máximo de 5 MB.");
       return;
     }
 
@@ -624,51 +624,60 @@ function EquipmentDialog({
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    await processImageFile(file);
+    e.target.value = "";
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    await processImageFile(file);
+  };
+
   const handleSaveForm = () => {
     onSave(form as Equipment, imageFile);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="font-heading">{equipment ? "Editar Equipamento" : "Novo Equipamento"}</DialogTitle>
-          <DialogDescription>Preencha os dados do equipamento.</DialogDescription>
+      <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col overflow-hidden p-0">
+        <DialogHeader className="border-b bg-card px-6 py-5">
+          <DialogTitle className="font-heading text-3xl leading-tight">{equipment ? "Editar Equipamento" : "Novo Equipamento"}</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Preencha os dados básicos para cadastrar um novo ativo no sistema.
+          </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-2">
+        <div className="space-y-5 overflow-y-auto px-6 py-5">
           <div className="grid gap-2">
-            <Label>Nome</Label>
-            <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Label className="text-xs font-semibold tracking-wide text-foreground/80">Nome do Equipamento</Label>
+            <Input
+              value={form.name || ""}
+              placeholder="Ex: Notebook Dell Latitude 5420"
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
           </div>
-          <div className="grid gap-2">
-            <Label>Foto / Imagem</Label>
-            <Input type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} />
-            {previewUrl && (
-              <div className="relative h-24 w-24 mt-2">
-                <img src={resolveImageUrl(previewUrl)} alt="Preview" className="h-full w-full object-cover rounded-md border" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPreviewUrl(null);
-                    setImageFile(null);
-                    setForm((prev) => ({ ...prev, image: undefined }));
-                  }}
-                  className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold shadow-md hover:bg-destructive/90"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label>Nº de Série</Label>
-              <Input value={form.serialNumber || ""} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
+              <Label className="text-xs font-semibold tracking-wide text-foreground/80">N° de Série</Label>
+              <Input
+                value={form.serialNumber || ""}
+                placeholder="Ex: BR-123456789"
+                onChange={(e) => setForm({ ...form, serialNumber: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
-              <Label>Status</Label>
+              <Label className="text-xs font-semibold tracking-wide text-foreground/80">Status</Label>
               <Select value={form.status || "disponivel"} onValueChange={(v) => setForm({ ...form, status: v as Equipment["status"] })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="disponivel">Disponível</SelectItem>
                   <SelectItem value="em_uso">Em uso</SelectItem>
@@ -677,14 +686,95 @@ function EquipmentDialog({
               </Select>
             </div>
           </div>
+
           <div className="grid gap-2">
-            <Label>Descrição</Label>
-            <Input value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <Label className="text-xs font-semibold tracking-wide text-foreground/80">Upload de Foto</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png, image/jpeg, image/gif"
+              className="hidden"
+              onChange={handleImageUpload}
+            />
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setIsDragActive(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragActive(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                setIsDragActive(false);
+              }}
+              onDrop={handleDrop}
+              className={cn(
+                "rounded-md border border-dashed bg-muted/30 px-4 py-8 text-center outline-none transition-colors",
+                isDragActive ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
+              )}
+            >
+              {previewUrl ? (
+                <div className="mx-auto w-fit space-y-3">
+                  <div className="relative h-28 w-28">
+                    <img src={resolveImageUrl(previewUrl)} alt="Preview" className="h-full w-full rounded-md border object-cover" />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewUrl(null);
+                        setImageFile(null);
+                        setForm((prev) => ({ ...prev, image: undefined }));
+                      }}
+                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow hover:bg-destructive/90"
+                      aria-label="Remover imagem"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Clique ou arraste para substituir</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <ImageUp className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm text-foreground">
+                    <span className="font-semibold text-primary">Clique para fazer upload</span>
+                    <span className="text-muted-foreground"> ou arraste e solte aqui</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, GIF até 5MB</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="text-xs font-semibold tracking-wide text-foreground/80">Descrição</Label>
+            <Textarea
+              value={form.description || ""}
+              placeholder="Adicione detalhes ou observações sobre o equipamento..."
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="min-h-[88px] resize-none"
+            />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="border-t bg-muted/35 px-6 py-3 sm:justify-end">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSaveForm}>Salvar</Button>
+          <Button onClick={handleSaveForm} className="font-semibold">
+            <CheckCircle2 className="mr-1 h-4 w-4" />
+            Salvar Equipamento
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
