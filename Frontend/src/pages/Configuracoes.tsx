@@ -22,7 +22,7 @@ export default function Configuracoes() {
         <p className="text-muted-foreground text-sm mt-1">Personalize a aparência e acessibilidade do sistema</p>
       </div>
 
-      <div className="grid gap-4 max-w-2xl">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="font-heading text-base flex items-center gap-2">

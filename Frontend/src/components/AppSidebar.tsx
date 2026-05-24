@@ -6,7 +6,8 @@ import {
   Package,
   LogOut,
   Bell,
-  ChevronsUpDown
+  ChevronsUpDown,
+  LayoutDashboard
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -22,6 +23,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -86,6 +88,7 @@ export function AppSidebar() {
 
   if (user?.role === "Administrador") {
     mainItems.push(
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
       { title: "Equipamentos", url: "/equipamentos", icon: Monitor },
       { title: "Notificação", url: "/emprestimos", icon: ArrowRightLeft },
       { title: "Aprovações", url: "/notificacoes", icon: Bell }
@@ -103,22 +106,30 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+      <SidebarHeader className="p-2 group-data-[collapsible=icon]:p-1">
+        <div className="flex items-center justify-between gap-2 overflow-hidden group-data-[collapsible=icon]:justify-center">
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden group-data-[collapsible=icon]:gap-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
             <Package className="h-5 w-5" />
-          </div>
-          {!collapsed && (
-            <div className="flex flex-col">
-              <span className="font-heading text-base font-bold tracking-tight text-sidebar-foreground">
-                SmartResource+
-              </span>
-              <span className="text-[11px] text-sidebar-foreground/60">
-                Gestão de Recursos
-              </span>
             </div>
-          )}
+            {!collapsed && (
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate font-heading text-base font-bold tracking-tight text-sidebar-foreground">
+                  SmartResource+
+                </span>
+                <span className="truncate text-[11px] text-sidebar-foreground/60">
+                  Gestão de Recursos
+                </span>
+              </div>
+            )}
+          </div>
+          {!collapsed && <SidebarTrigger className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />}
         </div>
+        {collapsed && (
+          <div className="flex justify-center">
+            <SidebarTrigger className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
+          </div>
+        )}
       </SidebarHeader>
 
       <SidebarContent>
@@ -201,16 +212,16 @@ export function AppSidebar() {
                       </div>
                       {!collapsed && (
                         <div className="flex flex-col text-left min-w-0">
-                          <span className="truncate text-xs font-semibold text-foreground">
+                          <span className="truncate text-xs font-semibold text-sidebar-foreground">
                             {getFirstName(user.name)}
                           </span>
-                          <span className="truncate text-[10px] text-muted-foreground">
+                          <span className="truncate text-[10px] text-sidebar-foreground/70">
                             {user.sector}
                           </span>
                         </div>
                       )}
                     </div>
-                    {!collapsed && <ChevronsUpDown className="h-4 w-4 text-muted-foreground shrink-0 ml-1" />}
+                    {!collapsed && <ChevronsUpDown className="h-4 w-4 text-sidebar-foreground/70 shrink-0 ml-1" />}
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent

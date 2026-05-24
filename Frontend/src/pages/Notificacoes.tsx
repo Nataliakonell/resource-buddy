@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { Bell, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface PendingLoan {
   id: number;
@@ -19,12 +19,11 @@ interface PendingLoan {
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5279/api";
 
 export default function Notificacoes() {
-  const [data, setData] = useState<PendingLoan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const fetchPendingLoans = async () => {
-    try {
-      setIsLoading(true);
+  const { data = [], isLoading } = useQuery<PendingLoan[]>({
+    queryKey: ["pending-loans"],
+    queryFn: async () => {
       const token = localStorage.getItem("resource_buddy_token");
       const res = await fetch(`${apiUrl}/loans`, {
         headers: {
@@ -37,9 +36,7 @@ export default function Notificacoes() {
       }
 
       const json = await res.json();
-      
-      // Filtrar apenas os que estão como "pendente" (ou "recusado" mapeado como "rejeitado" no front)
-      const pending = json
+      return json
         .filter((l: any) => l.status === "pendente")
         .map((l: any) => ({
           id: l.id,
@@ -52,63 +49,55 @@ export default function Notificacoes() {
           requestDate: new Date(l.requestedAt).toLocaleDateString("pt-BR"),
           notes: l.notes,
         }));
-
-      setData(pending);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Não foi possível carregar o painel de aprovações.");
-    } finally {
-      setIsLoading(false);
     }
-  };
+  });
 
-  useEffect(() => {
-    fetchPendingLoans();
-  }, []);
-
-  const handleApprove = async (id: number) => {
-    try {
+  const approveMutation = useMutation({
+    mutationFn: async (id: number) => {
       const token = localStorage.getItem("resource_buddy_token");
       const res = await fetch(`${apiUrl}/loans/${id}/approve`, {
         method: "PATCH",
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
       });
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "Erro ao aprovar empréstimo.");
       }
-
+    },
+    onSuccess: () => {
       toast.success("Empréstimo aprovado com sucesso!");
-      fetchPendingLoans();
-    } catch (error: any) {
+      queryClient.invalidateQueries({ queryKey: ["pending-loans"] });
+    },
+    onError: (error: any) => {
       toast.error(error.message);
     }
-  };
+  });
 
-  const handleReject = async (id: number) => {
-    try {
+  const rejectMutation = useMutation({
+    mutationFn: async (id: number) => {
       const token = localStorage.getItem("resource_buddy_token");
       const res = await fetch(`${apiUrl}/loans/${id}/reject`, {
         method: "PATCH",
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
       });
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "Erro ao recusar empréstimo.");
       }
-
+    },
+    onSuccess: () => {
       toast.info("Empréstimo rejeitado.");
-      fetchPendingLoans();
-    } catch (error: any) {
+      queryClient.invalidateQueries({ queryKey: ["pending-loans"] });
+    },
+    onError: (error: any) => {
       toast.error(error.message);
     }
-  };
+  });
+
+  const handleApprove = (id: number) => approveMutation.mutate(id);
+  const handleReject = (id: number) => rejectMutation.mutate(id);
 
   return (
     <div className="space-y-6">

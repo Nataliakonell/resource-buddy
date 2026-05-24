@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Search, CheckCircle, XCircle, ArrowRightLeft, Loader2 } from "lucide-re
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/context/AuthContext";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface Loan {
   id: string | number;
@@ -25,19 +26,16 @@ const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5279/api";
 
 export default function Emprestimos() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todos");
-  const [data, setData] = useState<Loan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchLoans = async () => {
-    try {
-      setIsLoading(true);
+  const { data: loans = [], isLoading } = useQuery<Loan[]>({
+    queryKey: ["loans"],
+    queryFn: async () => {
       const token = localStorage.getItem("resource_buddy_token");
       const res = await fetch(`${apiUrl}/loans`, {
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
       });
 
       if (!res.ok) {
@@ -46,7 +44,7 @@ export default function Emprestimos() {
 
       const json = await res.json();
       
-      const mappedLoans: Loan[] = json.map((l: any) => {
+      return json.map((l: any) => {
         const reqDate = new Date(l.requestedAt);
         const expDate = new Date(reqDate.getTime() + l.days * 24 * 60 * 60 * 1000);
         
@@ -62,92 +60,79 @@ export default function Emprestimos() {
           status: l.status === "recusado" ? "rejeitado" : l.status,
         };
       });
-
-      setData(mappedLoans);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Não foi possível carregar os empréstimos.");
-    } finally {
-      setIsLoading(false);
     }
-  };
+  });
 
-  useEffect(() => {
-    fetchLoans();
-  }, []);
-
-  const filtered = data.filter((l) => {
+  const filtered = loans.filter((l) => {
     const matchSearch = l.equipmentName.toLowerCase().includes(search.toLowerCase()) ||
       l.userName.toLowerCase().includes(search.toLowerCase());
     const matchFilter = filter === "todos" || l.status === filter;
     return matchSearch && matchFilter;
   });
 
-  const handleApprove = async (id: string | number) => {
-    try {
+  const approveMutation = useMutation({
+    mutationFn: async (id: string | number) => {
       const token = localStorage.getItem("resource_buddy_token");
       const res = await fetch(`${apiUrl}/loans/${id}/approve`, {
         method: "PATCH",
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
       });
-
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "Erro ao aprovar empréstimo.");
       }
-
+    },
+    onSuccess: () => {
       toast.success("Empréstimo aprovado com sucesso!");
-      fetchLoans();
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ["loans"] });
+      // Também invalida "pending-loans" para comunicação com a outra tela Notificacoes.tsx (boa prática!)
+      queryClient.invalidateQueries({ queryKey: ["pending-loans"] });
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
 
-  const handleReject = async (id: string | number) => {
-    try {
+  const rejectMutation = useMutation({
+    mutationFn: async (id: string | number) => {
       const token = localStorage.getItem("resource_buddy_token");
       const res = await fetch(`${apiUrl}/loans/${id}/reject`, {
         method: "PATCH",
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
       });
-
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "Erro ao recusar empréstimo.");
       }
-
+    },
+    onSuccess: () => {
       toast.info("Empréstimo rejeitado.");
-      fetchLoans();
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ["loans"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-loans"] });
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
 
-  const handleReturn = async (id: string | number) => {
-    try {
+  const returnMutation = useMutation({
+    mutationFn: async (id: string | number) => {
       const token = localStorage.getItem("resource_buddy_token");
       const res = await fetch(`${apiUrl}/loans/${id}/return`, {
         method: "PATCH",
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
       });
-
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "Erro ao registrar devolução.");
       }
-
+    },
+    onSuccess: () => {
       toast.success("Devolução registrada com sucesso!");
-      fetchLoans();
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ["loans"] });
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
+
+  const handleApprove = (id: string | number) => approveMutation.mutate(id);
+  const handleReject = (id: string | number) => rejectMutation.mutate(id);
+  const handleReturn = (id: string | number) => returnMutation.mutate(id);
 
   return (
     <div className="space-y-6">

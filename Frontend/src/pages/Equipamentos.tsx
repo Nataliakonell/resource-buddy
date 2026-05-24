@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Equipment } from "@/data/mock";
-import { Search, Plus, Pencil, Trash2, Monitor, ArrowRightLeft, Loader2, Calendar as CalendarIcon, CheckCircle2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, Monitor, ArrowRightLeft, Loader2, Calendar as CalendarIcon, CheckCircle2, ImageUp } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -21,6 +21,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, differenceInDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5279/api";
 
@@ -89,12 +90,11 @@ const compressImage = (file: File): Promise<Blob> => {
 };
 
 export default function Equipamentos() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("todos");
-  const [data, setData] = useState<Equipment[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Equipment | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [zoomedImage, setZoomedImage] = useState<{ src: string; alt: string } | null>(null);
 
   const { user } = useAuth();
@@ -103,6 +103,51 @@ export default function Equipamentos() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [loanNotes, setLoanNotes] = useState("");
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  const { data: equipments = [], isLoading } = useQuery<Equipment[]>({
+    queryKey: ["equipments"],
+    queryFn: async () => {
+      const token = localStorage.getItem("resource_buddy_token");
+      const res = await fetch(`${apiUrl}/equipments`, {
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
+      });
+      if (!res.ok) throw new Error("Erro ao buscar equipamentos da API");
+      return res.json();
+    }
+  });
+
+  const requestLoanMutation = useMutation({
+    mutationFn: async (payload: { equipmentId: string | number; days: number; startDate: string; endDate: string; notes: string; sector: string | undefined }) => {
+      const token = localStorage.getItem("resource_buddy_token");
+      const res = await fetch(`${apiUrl}/loans`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        throw new Error(errorJson.error || "Erro ao solicitar equipamento.");
+      }
+    },
+    onSuccess: () => {
+      toast.success("Solicitação de empréstimo enviada com sucesso!");
+      setRequestingEquipment(null);
+      setLoanNotes("");
+      setStartDate(undefined);
+      setEndDate(undefined);
+      queryClient.invalidateQueries({ queryKey: ["equipments"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-loans"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Não foi possível enviar a solicitação.");
+    },
+    onSettled: () => {
+      setIsSubmittingRequest(false);
+    }
+  });
 
   const handleRequestLoanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,84 +166,78 @@ export default function Equipamentos() {
     const startSelected = startOfDay(startDate);
     const endSelected = startOfDay(endDate);
 
-    if (startSelected < today) {
-      toast.error("A Data de Início não pode ser anterior à data de hoje.");
-      return;
-    }
+    if (startSelected < today) return toast.error("A Data de Início não pode ser anterior à data de hoje.");
+    if (endSelected < startSelected) return toast.error("A Data de Fim não pode ser anterior à Data de Início.");
 
-    if (endSelected < startSelected) {
-      toast.error("A Data de Fim não pode ser anterior à Data de Início.");
-      return;
-    }
-
-    // Calcular dias de empréstimo (diferença em dias inteiros)
     let days = differenceInDays(endSelected, startSelected);
-    if (days <= 0) {
-      days = 1; // Mínimo de 1 dia de empréstimo caso início e fim sejam iguais
-    }
+    if (days <= 0) days = 1;
 
-    try {
-      setIsSubmittingRequest(true);
+    setIsSubmittingRequest(true);
+    requestLoanMutation.mutate({
+      equipmentId: requestingEquipment.id,
+      days,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      notes: loanNotes,
+      sector: user?.sector
+    });
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload: { eq: Equipment; newImageBlob: Blob | null }) => {
+      const { eq, newImageBlob } = payload;
       const token = localStorage.getItem("resource_buddy_token");
-      const res = await fetch(`${apiUrl}/loans`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          equipmentId: requestingEquipment.id,
-          days,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-          notes: loanNotes,
-          sector: user?.sector
-        })
-      });
+      const formData = new FormData();
+      formData.append("name", eq.name);
+      formData.append("status", eq.status);
+      formData.append("serialNumber", eq.serialNumber);
+      formData.append("description", eq.description);
 
+      if (eq.id) formData.append("id", String(eq.id));
+      if (newImageBlob) formData.append("image", newImageBlob, "image.jpg");
+      else if (eq.image) formData.append("image", eq.image);
+
+      const url = eq.id ? `${apiUrl}/equipments/${eq.id}` : `${apiUrl}/equipments`;
+      const res = await fetch(url, {
+        method: eq.id ? "PUT" : "POST",
+        body: formData,
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
+      });
+      if (!res.ok) throw new Error("Erro ao salvar o equipamento na API");
+      return { saved: await res.json(), isEdit: !!eq.id };
+    },
+    onSuccess: ({ isEdit }) => {
+      toast.success(isEdit ? "Equipamento atualizado com sucesso!" : "Equipamento cadastrado com sucesso!");
+      setDialogOpen(false);
+      setEditing(null);
+      queryClient.invalidateQueries({ queryKey: ["equipments"] });
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string | number) => {
+      const token = localStorage.getItem("resource_buddy_token");
+      const res = await fetch(`${apiUrl}/equipments/${id}`, {
+        method: "DELETE",
+        headers: { ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
+      });
       if (!res.ok) {
         const errorJson = await res.json().catch(() => ({}));
-        throw new Error(errorJson.error || "Erro ao solicitar equipamento.");
+        throw new Error(errorJson.error || "Erro ao remover o equipamento");
       }
+    },
+    onSuccess: () => {
+      toast.success("Equipamento removido com sucesso.");
+      queryClient.invalidateQueries({ queryKey: ["equipments"] });
+    },
+    onError: (err: any) => toast.error(err.message)
+  });
 
-      toast.success("Solicitação de empréstimo enviada com sucesso!");
-      setRequestingEquipment(null);
-      setLoanNotes("");
-      setStartDate(undefined);
-      setEndDate(undefined);
-      fetchEquipments();
-    } catch (err: any) {
-      toast.error(err.message || "Não foi possível enviar a solicitação.");
-    } finally {
-      setIsSubmittingRequest(false);
-    }
-  };
+  const handleSave = (eq: Equipment, newImageBlob: Blob | null) => saveMutation.mutate({ eq, newImageBlob });
+  const handleDelete = (id: string | number) => deleteMutation.mutate(id);
 
-  const fetchEquipments = async () => {
-    try {
-      setIsLoading(true);
-      const token = localStorage.getItem("resource_buddy_token");
-      const res = await fetch(`${apiUrl}/equipments`, {
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
-      });
-      if (!res.ok) throw new Error("Erro ao buscar equipamentos da API");
-      const json = await res.json();
-      setData(json);
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Não foi possível conectar ao servidor backend.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchEquipments();
-  }, []);
-
-  const filtered = data.filter((e) => {
+  const filtered = equipments.filter((e) => {
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) ||
       e.serialNumber.toLowerCase().includes(search.toLowerCase());
 
@@ -208,73 +247,6 @@ export default function Equipamentos() {
     return matchSearch && matchFilter && matchRole;
   });
 
-  const handleSave = async (eq: Equipment, newImageBlob: Blob | null) => {
-    try {
-      const token = localStorage.getItem("resource_buddy_token");
-      const formData = new FormData();
-      formData.append("name", eq.name);
-      formData.append("status", eq.status);
-      formData.append("serialNumber", eq.serialNumber);
-      formData.append("description", eq.description);
-
-      if (eq.id) {
-        formData.append("id", String(eq.id));
-      }
-
-      if (newImageBlob) {
-        formData.append("image", newImageBlob, "image.jpg");
-      } else if (eq.image) {
-        formData.append("image", eq.image);
-      }
-
-      const method = eq.id ? "PUT" : "POST";
-      const url = eq.id ? `${apiUrl}/equipments/${eq.id}` : `${apiUrl}/equipments`;
-
-      const res = await fetch(url, {
-        method,
-        body: formData,
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
-      });
-
-      if (!res.ok) throw new Error("Erro ao salvar o equipamento na API");
-      const saved = await res.json();
-
-      if (eq.id) {
-        setData((d) => d.map((e) => (e.id === saved.id ? saved : e)));
-        toast.success("Equipamento atualizado com sucesso!");
-      } else {
-        setData((d) => [saved, ...d]);
-        toast.success("Equipamento cadastrado com sucesso!");
-      }
-      setDialogOpen(false);
-      setEditing(null);
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleDelete = async (id: string | number) => {
-    try {
-      const token = localStorage.getItem("resource_buddy_token");
-      const res = await fetch(`${apiUrl}/equipments/${id}`, {
-        method: "DELETE",
-        headers: {
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
-      });
-      if (!res.ok) {
-        const errorJson = await res.json().catch(() => ({}));
-        throw new Error(errorJson.error || "Erro ao remover o equipamento");
-      }
-      setData((d) => d.filter((e) => e.id !== id));
-      toast.success("Equipamento removido com sucesso.");
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -282,7 +254,7 @@ export default function Equipamentos() {
           <div className="flex items-center gap-3">
             <h1 className="font-heading text-2xl font-bold tracking-tight">Equipamentos</h1>
             <div className="bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full text-xs font-semibold">
-              Total: {data.length}
+              Total: {equipments.length}
             </div>
           </div>
           <p className="text-muted-foreground text-sm mt-1">Gerencie os equipamentos da organização</p>
@@ -610,6 +582,8 @@ function EquipmentDialog({
   const [form, setForm] = useState<Partial<Equipment>>({});
   const [imageFile, setImageFile] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -630,13 +604,11 @@ function EquipmentDialog({
     }
   }, [open, equipment]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const processImageFile = async (file: File) => {
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("O arquivo excede o limite máximo de 10 MB.");
-      e.target.value = "";
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("O arquivo excede o limite máximo de 5 MB.");
       return;
     }
 
@@ -652,51 +624,60 @@ function EquipmentDialog({
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    await processImageFile(file);
+    e.target.value = "";
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    await processImageFile(file);
+  };
+
   const handleSaveForm = () => {
     onSave(form as Equipment, imageFile);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="font-heading">{equipment ? "Editar Equipamento" : "Novo Equipamento"}</DialogTitle>
-          <DialogDescription>Preencha os dados do equipamento.</DialogDescription>
+      <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col overflow-hidden p-0">
+        <DialogHeader className="border-b bg-card px-6 py-5">
+          <DialogTitle className="font-heading text-3xl leading-tight">{equipment ? "Editar Equipamento" : "Novo Equipamento"}</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Preencha os dados básicos para cadastrar um novo ativo no sistema.
+          </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-2">
+        <div className="space-y-5 overflow-y-auto px-6 py-5">
           <div className="grid gap-2">
-            <Label>Nome</Label>
-            <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Label className="text-xs font-semibold tracking-wide text-foreground/80">Nome do Equipamento</Label>
+            <Input
+              value={form.name || ""}
+              placeholder="Ex: Notebook Dell Latitude 5420"
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
           </div>
-          <div className="grid gap-2">
-            <Label>Foto / Imagem</Label>
-            <Input type="file" accept="image/png, image/jpeg" onChange={handleImageUpload} />
-            {previewUrl && (
-              <div className="relative h-24 w-24 mt-2">
-                <img src={resolveImageUrl(previewUrl)} alt="Preview" className="h-full w-full object-cover rounded-md border" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPreviewUrl(null);
-                    setImageFile(null);
-                    setForm((prev) => ({ ...prev, image: undefined }));
-                  }}
-                  className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold shadow-md hover:bg-destructive/90"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label>Nº de Série</Label>
-              <Input value={form.serialNumber || ""} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
+              <Label className="text-xs font-semibold tracking-wide text-foreground/80">N° de Série</Label>
+              <Input
+                value={form.serialNumber || ""}
+                placeholder="Ex: BR-123456789"
+                onChange={(e) => setForm({ ...form, serialNumber: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
-              <Label>Status</Label>
+              <Label className="text-xs font-semibold tracking-wide text-foreground/80">Status</Label>
               <Select value={form.status || "disponivel"} onValueChange={(v) => setForm({ ...form, status: v as Equipment["status"] })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="disponivel">Disponível</SelectItem>
                   <SelectItem value="em_uso">Em uso</SelectItem>
@@ -705,14 +686,95 @@ function EquipmentDialog({
               </Select>
             </div>
           </div>
+
           <div className="grid gap-2">
-            <Label>Descrição</Label>
-            <Input value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <Label className="text-xs font-semibold tracking-wide text-foreground/80">Upload de Foto</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png, image/jpeg, image/gif"
+              className="hidden"
+              onChange={handleImageUpload}
+            />
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setIsDragActive(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragActive(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                setIsDragActive(false);
+              }}
+              onDrop={handleDrop}
+              className={cn(
+                "rounded-md border border-dashed bg-muted/30 px-4 py-8 text-center outline-none transition-colors",
+                isDragActive ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
+              )}
+            >
+              {previewUrl ? (
+                <div className="mx-auto w-fit space-y-3">
+                  <div className="relative h-28 w-28">
+                    <img src={resolveImageUrl(previewUrl)} alt="Preview" className="h-full w-full rounded-md border object-cover" />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewUrl(null);
+                        setImageFile(null);
+                        setForm((prev) => ({ ...prev, image: undefined }));
+                      }}
+                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow hover:bg-destructive/90"
+                      aria-label="Remover imagem"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Clique ou arraste para substituir</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <ImageUp className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm text-foreground">
+                    <span className="font-semibold text-primary">Clique para fazer upload</span>
+                    <span className="text-muted-foreground"> ou arraste e solte aqui</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, GIF até 5MB</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="text-xs font-semibold tracking-wide text-foreground/80">Descrição</Label>
+            <Textarea
+              value={form.description || ""}
+              placeholder="Adicione detalhes ou observações sobre o equipamento..."
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="min-h-[88px] resize-none"
+            />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="border-t bg-muted/35 px-6 py-3 sm:justify-end">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSaveForm}>Salvar</Button>
+          <Button onClick={handleSaveForm} className="font-semibold">
+            <CheckCircle2 className="mr-1 h-4 w-4" />
+            Salvar Equipamento
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
