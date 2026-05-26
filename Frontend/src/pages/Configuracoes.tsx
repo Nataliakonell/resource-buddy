@@ -3,16 +3,47 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
-import { Accessibility, Moon, Type, Bell } from "lucide-react";
+import { Eye, Moon, Type, Bell, CheckCircle2 } from "lucide-react";
 
 export default function Configuracoes() {
-  const [darkMode, setDarkMode] = useState(false);
-  const [fontSize, setFontSize] = useState("normal");
-  const [notifications, setNotifications] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem("dark-mode") === "true";
+  });
+  const [fontSize, setFontSize] = useState(() => {
+    return localStorage.getItem("font-size") || "normal";
+  });
+  const [notifications, setNotifications] = useState(() => {
+    return localStorage.getItem("notifications") !== "false";
+  });
+  const [accessTheme, setAccessTheme] = useState(() => {
+    return localStorage.getItem("accessibility-theme") || "normal";
+  });
 
   const toggleDarkMode = (checked: boolean) => {
     setDarkMode(checked);
+    localStorage.setItem("dark-mode", String(checked));
     document.documentElement.classList.toggle("dark", checked);
+  };
+
+  const handleFontSizeChange = (v: string) => {
+    setFontSize(v);
+    localStorage.setItem("font-size", v);
+    document.documentElement.style.fontSize = v === "grande" ? "18px" : v === "muito-grande" ? "20px" : "16px";
+  };
+
+  const handleNotificationsChange = (checked: boolean) => {
+    setNotifications(checked);
+    localStorage.setItem("notifications", String(checked));
+  };
+
+  const handleAccessThemeChange = (v: string) => {
+    setAccessTheme(v);
+    localStorage.setItem("accessibility-theme", v);
+    
+    document.documentElement.classList.remove("theme-daltonismo");
+    if (v === "daltonismo") {
+      document.documentElement.classList.add("theme-daltonismo");
+    }
   };
 
   return (
@@ -48,7 +79,7 @@ export default function Configuracoes() {
           <CardContent>
             <div className="flex items-center justify-between">
               <Label>Tamanho da fonte</Label>
-              <Select value={fontSize} onValueChange={(v) => { setFontSize(v); document.documentElement.style.fontSize = v === "grande" ? "18px" : v === "muito-grande" ? "20px" : "16px"; }}>
+              <Select value={fontSize} onValueChange={handleFontSizeChange}>
                 <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="normal">Normal</SelectItem>
@@ -70,7 +101,7 @@ export default function Configuracoes() {
           <CardContent>
             <div className="flex items-center justify-between">
               <Label htmlFor="notif">Receber notificações</Label>
-              <Switch id="notif" checked={notifications} onCheckedChange={setNotifications} />
+              <Switch id="notif" checked={notifications} onCheckedChange={handleNotificationsChange} />
             </div>
           </CardContent>
         </Card>
@@ -78,16 +109,38 @@ export default function Configuracoes() {
         <Card>
           <CardHeader>
             <CardTitle className="font-heading text-base flex items-center gap-2">
-              <Accessibility className="h-4 w-4" /> Acessibilidade
+              <Eye className="h-4 w-4" /> Modo Daltônico
             </CardTitle>
-            <CardDescription>Recursos de acessibilidade do SmartResource+</CardDescription>
+            <CardDescription>Ajuste as cores do painel para daltônicos (Protanopia/Deuteranopia)</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>✓ Navegação completa por teclado</p>
-            <p>✓ Compatível com leitores de tela</p>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <Label>Paleta de Cores</Label>
+              <Select value={accessTheme} onValueChange={handleAccessThemeChange}>
+                <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="normal">Padrão</SelectItem>
+                  <SelectItem value="daltonismo">Daltônico (Azul / Laranja)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="font-heading text-base flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" /> Recursos de Acessibilidade Ativos
+            </CardTitle>
+            <CardDescription>Confira o que está configurado para garantir a melhor experiência</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
+            <p>✓ Navegação completa por teclado (Tab / Enter)</p>
+            <p>✓ Compatível com leitores de tela (Labels ARIA)</p>
             <p>✓ Textos alternativos em ícones e imagens</p>
-            <p>✓ Alto contraste no modo escuro</p>
-            <p>✓ Ajuste de tamanho da fonte</p>
+            <p>✓ Identificação dupla de status (Cores e Ícones distintos)</p>
+            <p>✓ Paleta otimizada para daltonismo (Protanopia / Deuteranopia)</p>
+            <p>✓ Controle de dimensionamento dinâmico de texto</p>
           </CardContent>
         </Card>
       </div>

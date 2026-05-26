@@ -187,35 +187,35 @@ export default function Dashboard() {
           value={summary.available}
           description="Prontos para novas solicitações"
           icon={CheckCircle2}
-          accent="bg-emerald-500"
+          accent="bg-success"
         />
         <StatCard
           title="Equipamentos emprestados"
           value={summary.borrowed}
           description="Em uso pelos colaboradores"
           icon={ArrowRightLeft}
-          accent="bg-sky-500"
+          accent="bg-info"
         />
         <StatCard
           title="Solicitações aprovadas"
           value={summary.approved}
           description="Pedidos liberados para retirada"
           icon={Bell}
-          accent="bg-violet-500"
+          accent="bg-primary"
         />
         <StatCard
           title="Solicitações pendentes"
           value={summary.pending}
           description="Aguardando decisão do administrador"
           icon={Clock3}
-          accent="bg-amber-500"
+          accent="bg-warning"
         />
         <StatCard
           title="Equipamentos em manutenção"
           value={summary.maintenance}
           description="Itens indisponíveis temporariamente"
           icon={TriangleAlert}
-          accent="bg-rose-500"
+          accent="bg-destructive"
         />
       </div>
 

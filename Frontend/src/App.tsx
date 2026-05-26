@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -51,42 +52,67 @@ const HomeRedirect = () => {
   return <Navigate to={user?.role === "Administrador" ? "/dashboard" : "/equipamentos"} replace />;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <VLibras />
-          <Layout>
-            <Routes>
-              {/* Public Auth Routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+const App = () => {
+  useEffect(() => {
+    // Load and apply dark mode
+    const darkMode = localStorage.getItem("dark-mode") === "true";
+    document.documentElement.classList.toggle("dark", darkMode);
 
-              {/* Protected Collaborative/General Routes */}
-              <Route path="/" element={<ProtectedRoute><HomeRedirect /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute adminOnly><Dashboard /></ProtectedRoute>} />
-              <Route path="/equipamentos" element={<ProtectedRoute><Equipamentos /></ProtectedRoute>} />
-              <Route path="/equipamentos/:id" element={<ProtectedRoute><EquipamentoDetalhes /></ProtectedRoute>} />
-              <Route path="/emprestimos" element={<ProtectedRoute><Emprestimos /></ProtectedRoute>} />
-              <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+    // Load and apply accessibility theme
+    const accessTheme = localStorage.getItem("accessibility-theme");
+    document.documentElement.classList.remove("theme-daltonismo");
+    if (accessTheme === "daltonismo") {
+      document.documentElement.classList.add("theme-daltonismo");
+    }
 
-              {/* Protected Administrative-only Routes */}
-              <Route path="/notificacoes" element={<ProtectedRoute adminOnly><Notificacoes /></ProtectedRoute>} />
-              <Route path="/aprovacoes" element={<ProtectedRoute adminOnly><Aprovacoes /></ProtectedRoute>} />
+    // Load and apply font size
+    const fontSize = localStorage.getItem("font-size");
+    if (fontSize === "grande") {
+      document.documentElement.style.fontSize = "18px";
+    } else if (fontSize === "muito-grande") {
+      document.documentElement.style.fontSize = "20px";
+    } else {
+      document.documentElement.style.fontSize = "16px";
+    }
+  }, []);
 
-              {/* Protected Shared Details */}
-              <Route path="/solicitacao/:id" element={<ProtectedRoute><SolicitacaoDetalhes /></ProtectedRoute>} />
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <VLibras />
+            <Layout>
+              <Routes>
+                {/* Public Auth Routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Layout>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+                {/* Protected Collaborative/General Routes */}
+                <Route path="/" element={<ProtectedRoute><HomeRedirect /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute adminOnly><Dashboard /></ProtectedRoute>} />
+                <Route path="/equipamentos" element={<ProtectedRoute><Equipamentos /></ProtectedRoute>} />
+                <Route path="/equipamentos/:id" element={<ProtectedRoute><EquipamentoDetalhes /></ProtectedRoute>} />
+                <Route path="/emprestimos" element={<ProtectedRoute><Emprestimos /></ProtectedRoute>} />
+                <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+
+                {/* Protected Administrative-only Routes */}
+                <Route path="/notificacoes" element={<ProtectedRoute adminOnly><Notificacoes /></ProtectedRoute>} />
+                <Route path="/aprovacoes" element={<ProtectedRoute adminOnly><Aprovacoes /></ProtectedRoute>} />
+
+                {/* Protected Shared Details */}
+                <Route path="/solicitacao/:id" element={<ProtectedRoute><SolicitacaoDetalhes /></ProtectedRoute>} />
+
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Layout>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

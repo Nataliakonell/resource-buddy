@@ -87,16 +87,16 @@ export default function Aprovacoes() {
           {data.map((loan) => (
             <Card
               key={loan.id}
-              className="group relative overflow-hidden border-emerald-500/20 bg-emerald-500/5 transition-all duration-300 hover:border-emerald-500/40 hover:shadow-md hover:shadow-emerald-500/10"
+              className="group relative overflow-hidden border-success/20 bg-success/5 transition-all duration-300 hover:border-success/40 hover:shadow-md hover:shadow-success/10"
             >
               {/* Top accent bar */}
-              <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-400 to-teal-400 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+              <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-success to-info opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
               <CardContent className="p-5 flex flex-col gap-4">
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success ring-1 ring-success/20">
                       <Package className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
@@ -110,7 +110,7 @@ export default function Aprovacoes() {
                   </div>
                   <Badge
                     variant="outline"
-                    className="shrink-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-semibold"
+                    className="shrink-0 border-success/30 bg-success/10 text-success text-[10px] font-semibold"
                   >
                     <CheckCircle2 className="h-3 w-3 mr-1" />
                     Aprovado
@@ -156,7 +156,7 @@ export default function Aprovacoes() {
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground/70 mb-0.5">
                         Aprovado em
                       </span>
-                      <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                      <span className="font-medium text-success">
                         {loan.approvedAt}
                       </span>
                     </div>

@@ -296,11 +296,11 @@ export default function Equipamentos() {
             className={cn(
               "px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 select-none flex items-center gap-1.5",
               filter === "disponivel"
-                ? "bg-green-600 text-white shadow-sm scale-102"
+                ? "bg-success text-success-foreground shadow-sm scale-102"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
+            <span className="h-1.5 w-1.5 rounded-full bg-success-foreground animate-pulse"></span>
             Disponível
           </button>
           <button
@@ -308,11 +308,11 @@ export default function Equipamentos() {
             className={cn(
               "px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 select-none flex items-center gap-1.5",
               filter === "em_uso"
-                ? "bg-purple-600 text-white shadow-sm scale-102"
+                ? "bg-info text-info-foreground shadow-sm scale-102"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse"></span>
+            <span className="h-1.5 w-1.5 rounded-full bg-info-foreground animate-pulse"></span>
             Emprestado
           </button>
         </div>
